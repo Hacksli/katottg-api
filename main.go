@@ -12,6 +12,7 @@ import (
 )
 
 var db *sql.DB
+var tableName string
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -23,7 +24,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query("SELECT * FROM katottg WHERE text LIKE ? LIMIT 40", "%"+text+"%")
+	query := fmt.Sprintf("SELECT * FROM `%s` WHERE text LIKE ? LIMIT 40", tableName)
+	rows, err := db.Query(query, "%"+text+"%")
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "message": err.Error()})
 		return
@@ -69,6 +71,14 @@ func main() {
 	if err = db.Ping(); err != nil {
 		log.Fatal("DB ping failed:", err)
 	}
+
+	// Discover table name
+	err = db.QueryRow("SHOW TABLES").Scan(&tableName)
+	if err != nil {
+		log.Fatal("Cannot find table:", err)
+	}
+	fmt.Println("Using table:", tableName)
+
 	port := ":3000"
 	if p := os.Getenv("PORT"); p != "" {
 		port = ":" + p
