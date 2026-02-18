@@ -16,7 +16,8 @@ import (
 var db *sql.DB
 var tableName string
 
-const perPage = 40
+const defaultPerPage = 20
+const minPerPage = 5
 
 type Response struct {
 	FoundRows int                      `json:"foundRows"`
@@ -34,6 +35,14 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	if text == "" {
 		json.NewEncoder(w).Encode(map[string]string{"status": "error", "message": "text parameter required"})
 		return
+	}
+
+	// Page limit
+	perPage := defaultPerPage
+	if pl := r.URL.Query().Get("pagelimit"); pl != "" {
+		if v, err := strconv.Atoi(pl); err == nil && v > minPerPage {
+			perPage = v
+		}
 	}
 
 	// Page (1-based from client, convert to 0-based internally)
