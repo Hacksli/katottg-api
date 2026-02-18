@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -68,7 +69,11 @@ func main() {
 	if err = db.Ping(); err != nil {
 		log.Fatal("DB ping failed:", err)
 	}
-	fmt.Println("Server running on :3000")
+	port := ":3000"
+	if p := os.Getenv("PORT"); p != "" {
+		port = ":" + p
+	}
+	fmt.Println("Server running on", port)
 	http.HandleFunc("/", handler)
-	log.Fatal(http.ListenAndServe(":3000", nil))
+	log.Fatal(http.ListenAndServe(port, nil))
 }
