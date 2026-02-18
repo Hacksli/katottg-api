@@ -1,0 +1,35 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create project archive
+        run: |
+          zip -r project.zip . -x "*.git*"
+          ls -lh project.zip
+
+      - name: Deploy to server
+        run: |
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -F "file=@project.zip" \
+            https://admin.service.platform365.online/deployments/${{ secrets.DEPLOY_UUID }}/redeploy
+
+      - name: Deployment status
+        if: success()
+        run: echo "✅ Deployment completed successfully!"
+
+      - name: Deployment failed
+        if: failure()
+        run: echo "❌ Deployment failed!"
