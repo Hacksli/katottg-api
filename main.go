@@ -18,13 +18,78 @@ var tableName string
 
 const defaultPerPage = 20
 const minPerPage = 5
+const maxPerPage = 100
+
+type PageLink struct {
+	Page    interface{} `json:"page"`
+	Current string      `json:"current,omitempty"`
+	Class   string      `json:"class,omitempty"`
+}
 
 type Response struct {
 	FoundRows int                      `json:"foundRows"`
 	Total     int                      `json:"total"`
 	Items     []map[string]interface{} `json:"items"`
-	Links     map[int]string           `json:"links"`
+	Links     []PageLink               `json:"links"`
 	Filters   map[string]interface{}   `json:"filters"`
+}
+
+// getPagesBar replicates the PHP SysMethods::getPagesBar logic
+// currentPage is 0-based internally
+func getPagesBar(total, pageLimit, currentPage int) []PageLink {
+	totalPages := int(math.Ceil(float64(total) / float64(pageLimit)))
+	var res []PageLink
+
+	if totalPages > 7 {
+		// First page
+		if currentPage != 0 {
+			res = append(res, PageLink{Page: 1})
+		} else {
+			res = append(res, PageLink{Page: 1, Current: "true"})
+			res = append(res, PageLink{Page: 2})
+		}
+
+		if currentPage > 3 {
+			res = append(res, PageLink{Page: "...", Class: ""})
+		}
+
+		// Previous before current but not first
+		if currentPage > 1 && currentPage != totalPages {
+			res = append(res, PageLink{Page: currentPage})
+		}
+
+		// Current if not first and not last
+		if currentPage != 0 && currentPage != totalPages-1 {
+			res = append(res, PageLink{Page: currentPage + 1, Current: "true"})
+		}
+
+		// Next after current but not last
+		if currentPage > 0 && currentPage != totalPages-1 {
+			res = append(res, PageLink{Page: currentPage + 2})
+		}
+
+		// Last page
+		if currentPage != totalPages-2 {
+			if currentPage != totalPages-1 {
+				res = append(res, PageLink{Page: "...", Class: ""})
+			}
+			if currentPage != totalPages-1 {
+				res = append(res, PageLink{Page: totalPages})
+			} else {
+				res = append(res, PageLink{Page: totalPages, Current: "true"})
+			}
+		}
+	} else {
+		for i := 0; i < totalPages; i++ {
+			link := PageLink{Page: i + 1, Current: "false"}
+			if i == currentPage {
+				link.Current = "true"
+			}
+			res = append(res, link)
+		}
+	}
+
+	return res
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +108,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		if v, err := strconv.Atoi(pl); err == nil && v > minPerPage {
 			perPage = v
 		}
+	}
+	if perPage > maxPerPage {
+		perPage = maxPerPage
 	}
 
 	// Page (1-based from client, convert to 0-based internally)
@@ -108,17 +176,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		items = []map[string]interface{}{}
 	}
 
-	// Build links (1-based page numbers)
-	links := make(map[int]string)
-	baseURL := fmt.Sprintf("?text=%s", text)
-	for i := 0; i < totalPages; i++ {
-		links[i+1] = fmt.Sprintf("%s&page=%d", baseURL, i+1)
-	}
+	// Build links using getPagesBar (same logic as PHP)
+	links := getPagesBar(total, perPage, page)
 
-	// Build response
+	// Build filters (nextpage logic from PHP)
 	var nextPage interface{} = nil
-	if page+1 < totalPages {
-		nextPage = page + 2 // 1-based
+	if page+1 < len(links) && links[page+1].Page != "..." {
+		nextPage = page + 2
+	} else if page+1 < totalPages {
+		nextPage = page + 2
 	}
 
 	resp := Response{
@@ -127,7 +193,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		Items:     items,
 		Links:     links,
 		Filters: map[string]interface{}{
-			"page":     page + 1, // 1-based
+			"page":     page + 1,
 			"nextpage": nextPage,
 		},
 	}
